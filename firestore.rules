@@ -44,6 +44,12 @@ service cloud.firestore {
       allow update: if isSignedIn() && request.auth.uid == uid
         && request.resource.data.globalRole == resource.data.globalRole;
       allow delete: if false;
+
+      // Denormalized "my rooms" index — fully scoped to the user's own
+      // subtree, so this is always just request.auth.uid == uid.
+      match /rooms/{roomId} {
+        allow read, write: if isSignedIn() && request.auth.uid == uid;
+      }
     }
 
     // Maps a room's invite code -> roomId, so a user can resolve a code

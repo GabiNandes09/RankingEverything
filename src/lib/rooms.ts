@@ -1,14 +1,11 @@
 import type { User } from "firebase/auth";
 import {
   collection,
-  collectionGroup,
   doc,
   getDoc,
   onSnapshot,
-  query,
   serverTimestamp,
   setDoc,
-  where,
   type DocumentSnapshot,
   type QuerySnapshot,
   type Timestamp,
@@ -81,6 +78,7 @@ export async function createRoom(
 
   const memberRef = doc(db, "rooms", roomRef.id, "members", user.uid);
   const roomCodeRef = doc(db, "roomCodes", code);
+  const myRoomRef = doc(db, "users", user.uid, "rooms", roomRef.id);
 
   await Promise.all([
     setDoc(memberRef, {
@@ -90,6 +88,14 @@ export async function createRoom(
       joinedAt: serverTimestamp(),
     }),
     setDoc(roomCodeRef, { roomId: roomRef.id }),
+    setDoc(myRoomRef, {
+      name: input.name,
+      category: input.category,
+      ratingScale: input.ratingScale,
+      code,
+      ownerId: user.uid,
+      role: "owner" satisfies MemberRole,
+    }),
   ]);
 
   return roomRef.id;
@@ -105,26 +111,50 @@ export async function joinRoomByCode(user: User, rawCode: string): Promise<strin
   const roomId = codeSnap.data().roomId as string;
   const memberRef = doc(db, "rooms", roomId, "members", user.uid);
   const existingMember = await getDoc(memberRef);
+  let role: MemberRole = "member";
 
   if (existingMember.exists()) {
-    return roomId;
+    role = (existingMember.data().role as MemberRole) ?? "member";
+  } else {
+    try {
+      await setDoc(memberRef, {
+        uid: user.uid,
+        role,
+        displayName: user.displayName ?? "",
+        joinedAt: serverTimestamp(),
+      });
+    } catch {
+      throw new Error("Não foi possível entrar nessa sala. Ela pode ter sido excluída.");
+    }
   }
 
-  try {
-    await setDoc(memberRef, {
-      uid: user.uid,
-      role: "member" satisfies MemberRole,
-      displayName: user.displayName ?? "",
-      joinedAt: serverTimestamp(),
+  const roomSnap = await getDoc(doc(db, "rooms", roomId));
+  if (roomSnap.exists()) {
+    const data = roomSnap.data() as Omit<Room, "id">;
+    await setDoc(doc(db, "users", user.uid, "rooms", roomId), {
+      name: data.name,
+      category: data.category,
+      ratingScale: data.ratingScale,
+      code: data.code,
+      ownerId: data.ownerId,
+      role,
     });
-  } catch {
-    throw new Error("Não foi possível entrar nessa sala. Ela pode ter sido excluída.");
   }
 
   return roomId;
 }
 
-export interface MyRoom extends Room {
+// Denormalized copy of each room the user belongs to, kept at
+// users/{uid}/rooms/{roomId} so listing "my rooms" is a plain read of the
+// user's own subtree — no collectionGroup query (and its index/rules
+// complexity) needed.
+export interface MyRoom {
+  id: string;
+  name: string;
+  category: string;
+  ratingScale: RatingScale;
+  code: string;
+  ownerId: string;
   role: MemberRole;
 }
 
@@ -139,33 +169,13 @@ export function useMyRooms(uid: string | undefined) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets loading when the subscribed uid changes
     setLoading(true);
     setError(null);
-    const membershipsQuery = query(collectionGroup(db, "members"), where("uid", "==", uid));
 
     const unsubscribe = subscribeWithRetry<QuerySnapshot>(
-      (onNext, onErr) => onSnapshot(membershipsQuery, onNext, onErr),
-      async (snapshot) => {
-        const results = await Promise.all(
-          snapshot.docs.map(async (memberSnap) => {
-            const roomRef = memberSnap.ref.parent.parent;
-            if (!roomRef) return null;
-
-            const roomSnap = await getDoc(roomRef);
-            if (!roomSnap.exists()) return null;
-
-            const data = roomSnap.data() as Omit<Room, "id">;
-            if (data.deletedAt) return null;
-
-            return {
-              id: roomSnap.id,
-              ...data,
-              role: (memberSnap.data().role as MemberRole) ?? "member",
-            } satisfies MyRoom;
-          }),
-        );
-
+      (onNext, onErr) => onSnapshot(collection(db, "users", uid, "rooms"), onNext, onErr),
+      (snapshot) => {
         setRooms(
-          results
-            .filter((room): room is MyRoom => room !== null)
+          snapshot.docs
+            .map((d) => ({ id: d.id, ...(d.data() as Omit<MyRoom, "id">) }))
             .sort((a, b) => a.name.localeCompare(b.name)),
         );
         setError(null);
