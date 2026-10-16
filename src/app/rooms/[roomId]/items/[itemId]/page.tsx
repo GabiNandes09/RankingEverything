@@ -162,9 +162,18 @@ export default function ItemPage() {
         </div>
 
         {canManage && (
-          <Button variant="danger" size="sm" onClick={handleDelete} className="shrink-0">
-            Excluir
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              href={`/rooms/${roomId}/items/${itemId}/edit`}
+            >
+              Editar
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleDelete}>
+              Excluir
+            </Button>
+          </div>
         )}
       </div>
 
