@@ -7,7 +7,14 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  type DocumentSnapshot,
+} from "firebase/firestore";
 import {
   createContext,
   useContext,
@@ -15,7 +22,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { auth, db } from "./firebase";
+import { auth, db, subscribeWithRetry } from "./firebase";
 
 export type GlobalRole = "master" | "user";
 
@@ -73,9 +80,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = onSnapshot(doc(db, "users", user.uid), (snapshot) => {
-      setGlobalRole((snapshot.data()?.globalRole as GlobalRole | undefined) ?? "user");
-    });
+    const unsubscribe = subscribeWithRetry<DocumentSnapshot>(
+      (onNext, onErr) => onSnapshot(doc(db, "users", user.uid), onNext, onErr),
+      (snapshot) => {
+        setGlobalRole((snapshot.data()?.globalRole as GlobalRole | undefined) ?? "user");
+      },
+      (err) => {
+        console.error("globalRole snapshot error", err);
+        setGlobalRole("user");
+      },
+    );
 
     return unsubscribe;
   }, [user]);

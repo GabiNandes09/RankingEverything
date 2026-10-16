@@ -16,7 +16,7 @@ const ROLE_LABEL: Record<string, string> = {
 export default function RoomsPage() {
   const { user, loading, signOutUser } = useAuth();
   const router = useRouter();
-  const { rooms, loading: roomsLoading } = useMyRooms(user?.uid);
+  const { rooms, loading: roomsLoading, error: roomsError } = useMyRooms(user?.uid);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -78,7 +78,13 @@ export default function RoomsPage() {
           <p className="text-sm text-zinc-500">Carregando salas...</p>
         )}
 
-        {!roomsLoading && rooms.length === 0 && (
+        {roomsError && (
+          <p className="text-sm break-words text-red-600">
+            Erro ao carregar salas: {roomsError}
+          </p>
+        )}
+
+        {!roomsLoading && !roomsError && rooms.length === 0 && (
           <p className="text-sm text-zinc-500">
             Você ainda não participa de nenhuma sala. Crie uma ou entre com um código.
           </p>

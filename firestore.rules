@@ -9,7 +9,12 @@ service cloud.firestore {
 
     function isMaster() {
       return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.globalRole == "master";
+    }
+
+    function roomExists(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId));
     }
 
     function roomData(roomId) {
@@ -20,8 +25,13 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
     }
 
+    // Uses exists() (not get().data != null) because calling .data on a
+    // get() for a document that doesn't exist throws inside rules instead
+    // of evaluating to false — which broke this check even when it should
+    // have been short-circuited away by an earlier `||` clause.
     function isMember(roomId) {
-      return isSignedIn() && memberDoc(roomId).data != null;
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
     }
 
     function roleIn(roomId, roles) {
@@ -63,7 +73,7 @@ service cloud.firestore {
         // "member" — promotion to admin happens via a separate update by
         // the owner. The room must not be soft-deleted.
         allow create: if isSignedIn() && request.auth.uid == memberId
-          && roomData(roomId).deletedAt == null
+          && roomExists(roomId) && roomData(roomId).deletedAt == null
           && (
             (request.resource.data.role == "owner" && roomData(roomId).ownerId == request.auth.uid)
             || request.resource.data.role == "member"

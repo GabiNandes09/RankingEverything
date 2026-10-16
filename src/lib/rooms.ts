@@ -9,10 +9,12 @@ import {
   serverTimestamp,
   setDoc,
   where,
+  type DocumentSnapshot,
+  type QuerySnapshot,
   type Timestamp,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { db } from "./firebase";
+import { db, subscribeWithRetry } from "./firebase";
 
 export type RatingScale = "0-10" | "0-5-stars";
 export type MemberRole = "owner" | "admin" | "member";
@@ -129,46 +131,61 @@ export interface MyRoom extends Room {
 export function useMyRooms(uid: string | undefined) {
   const [rooms, setRooms] = useState<MyRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!uid) return;
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets loading when the subscribed uid changes
     setLoading(true);
+    setError(null);
     const membershipsQuery = query(collectionGroup(db, "members"), where("uid", "==", uid));
 
-    const unsubscribe = onSnapshot(membershipsQuery, async (snapshot) => {
-      const results = await Promise.all(
-        snapshot.docs.map(async (memberSnap) => {
-          const roomRef = memberSnap.ref.parent.parent;
-          if (!roomRef) return null;
+    const unsubscribe = subscribeWithRetry<QuerySnapshot>(
+      (onNext, onErr) => onSnapshot(membershipsQuery, onNext, onErr),
+      async (snapshot) => {
+        const results = await Promise.all(
+          snapshot.docs.map(async (memberSnap) => {
+            const roomRef = memberSnap.ref.parent.parent;
+            if (!roomRef) return null;
 
-          const roomSnap = await getDoc(roomRef);
-          if (!roomSnap.exists()) return null;
+            const roomSnap = await getDoc(roomRef);
+            if (!roomSnap.exists()) return null;
 
-          const data = roomSnap.data() as Omit<Room, "id">;
-          if (data.deletedAt) return null;
+            const data = roomSnap.data() as Omit<Room, "id">;
+            if (data.deletedAt) return null;
 
-          return {
-            id: roomSnap.id,
-            ...data,
-            role: (memberSnap.data().role as MemberRole) ?? "member",
-          } satisfies MyRoom;
-        }),
-      );
+            return {
+              id: roomSnap.id,
+              ...data,
+              role: (memberSnap.data().role as MemberRole) ?? "member",
+            } satisfies MyRoom;
+          }),
+        );
 
-      setRooms(
-        results
-          .filter((room): room is MyRoom => room !== null)
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      );
-      setLoading(false);
-    });
+        setRooms(
+          results
+            .filter((room): room is MyRoom => room !== null)
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
+        setError(null);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("useMyRooms snapshot error", err);
+        setError(err.message);
+        setLoading(false);
+      },
+    );
 
     return unsubscribe;
   }, [uid]);
 
-  return { rooms: uid ? rooms : [], loading: uid ? loading : false };
+  return {
+    rooms: uid ? rooms : [],
+    loading: uid ? loading : false,
+    error: uid ? error : null,
+  };
 }
 
 export function useRoom(roomId: string | undefined) {
@@ -183,14 +200,15 @@ export function useRoom(roomId: string | undefined) {
     setLoading(true);
     setError(null);
 
-    const unsubscribe = onSnapshot(
-      doc(db, "rooms", roomId),
+    const unsubscribe = subscribeWithRetry<DocumentSnapshot>(
+      (onNext, onErr) => onSnapshot(doc(db, "rooms", roomId), onNext, onErr),
       (snapshot) => {
         if (!snapshot.exists()) {
           setRoom(null);
           setError("Sala não encontrada.");
         } else {
           setRoom({ id: snapshot.id, ...(snapshot.data() as Omit<Room, "id">) });
+          setError(null);
         }
         setLoading(false);
       },
@@ -220,10 +238,17 @@ export function useRoomMembership(roomId: string | undefined, uid: string | unde
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets loading when roomId/uid changes
     setLoading(true);
-    const unsubscribe = onSnapshot(doc(db, "rooms", roomId, "members", uid), (snapshot) => {
-      setMember(snapshot.exists() ? (snapshot.data() as RoomMember) : null);
-      setLoading(false);
-    });
+    const unsubscribe = subscribeWithRetry<DocumentSnapshot>(
+      (onNext, onErr) => onSnapshot(doc(db, "rooms", roomId, "members", uid), onNext, onErr),
+      (snapshot) => {
+        setMember(snapshot.exists() ? (snapshot.data() as RoomMember) : null);
+        setLoading(false);
+      },
+      () => {
+        setMember(null);
+        setLoading(false);
+      },
+    );
 
     return unsubscribe;
   }, [roomId, uid]);
