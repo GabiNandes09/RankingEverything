@@ -7,7 +7,7 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   createContext,
   useContext,
@@ -17,8 +17,12 @@ import {
 } from "react";
 import { auth, db } from "./firebase";
 
+export type GlobalRole = "master" | "user";
+
 type AuthContextValue = {
   user: User | null;
+  globalRole: GlobalRole | null;
+  isMaster: boolean;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -54,6 +58,7 @@ async function upsertUserProfile(user: User) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [globalRole, setGlobalRole] = useState<GlobalRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,6 +70,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = onSnapshot(doc(db, "users", user.uid), (snapshot) => {
+      setGlobalRole((snapshot.data()?.globalRole as GlobalRole | undefined) ?? "user");
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  const effectiveGlobalRole = user ? globalRole : null;
+
   async function signInWithGoogle() {
     const result = await signInWithPopup(auth, new GoogleAuthProvider());
     await upsertUserProfile(result.user);
@@ -75,7 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOutUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        globalRole: effectiveGlobalRole,
+        isMaster: effectiveGlobalRole === "master",
+        loading,
+        signInWithGoogle,
+        signOutUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

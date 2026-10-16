@@ -12,6 +12,10 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.globalRole == "master";
     }
 
+    function roomData(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+    }
+
     function memberDoc(roomId) {
       return get(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
     }
@@ -32,15 +36,39 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Maps a room's invite code -> roomId, so a user can resolve a code
+    // without needing list/query access to the rooms collection itself.
+    match /roomCodes/{code} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      // "create" only fires when no document exists yet at this path, so
+      // this also enforces first-write-wins uniqueness for the code.
+      allow create: if isSignedIn() && request.resource.data.roomId is string;
+      allow update, delete: if false;
+    }
+
     match /rooms/{roomId} {
       allow read: if isSignedIn() && (isMember(roomId) || isMaster());
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
       allow update: if roleIn(roomId, ["owner"]) || isMaster();
       allow delete: if false;
 
       match /members/{memberId} {
-        allow read: if isSignedIn() && (isMember(roomId) || isMaster());
-        allow create: if isSignedIn() && request.auth.uid == memberId;
+        allow read: if isSignedIn()
+          && (request.auth.uid == memberId || isMember(roomId) || isMaster());
+
+        // Joining a room always creates your own member doc. You may only
+        // self-assign "owner" when you are the room's real owner (checked
+        // against the already-committed room doc); any other case must be
+        // "member" — promotion to admin happens via a separate update by
+        // the owner. The room must not be soft-deleted.
+        allow create: if isSignedIn() && request.auth.uid == memberId
+          && roomData(roomId).deletedAt == null
+          && (
+            (request.resource.data.role == "owner" && roomData(roomId).ownerId == request.auth.uid)
+            || request.resource.data.role == "member"
+          );
+
         allow update: if roleIn(roomId, ["owner"]) || isMaster();
         allow delete: if (isSignedIn() && request.auth.uid == memberId)
           || roleIn(roomId, ["owner"]) || isMaster();
