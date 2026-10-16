@@ -1,6 +1,7 @@
 import type { User } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -267,4 +268,43 @@ export function useRoomMembership(roomId: string | undefined, uid: string | unde
     member: roomId && uid ? member : null,
     loading: roomId && uid ? loading : false,
   };
+}
+
+async function syncMyRoomRole(roomId: string, uid: string, role: MemberRole): Promise<void> {
+  // Best-effort: the denormalized "my rooms" index exists so simple listing
+  // never needs a collectionGroup query (see CLAUDE.md). Keeping its role
+  // field in sync is a display nicety, not a security boundary — the real
+  // role always lives on rooms/{roomId}/members/{uid}.
+  try {
+    await setDoc(doc(db, "users", uid, "rooms", roomId), { role }, { merge: true });
+  } catch {
+    // ignore — the member doc under rooms/{roomId}/members/{uid} is the source of truth
+  }
+}
+
+export async function setMemberRole(
+  roomId: string,
+  targetUid: string,
+  role: "admin" | "member",
+): Promise<void> {
+  await setDoc(doc(db, "rooms", roomId, "members", targetUid), { role }, { merge: true });
+  await syncMyRoomRole(roomId, targetUid, role);
+}
+
+export async function removeMember(roomId: string, targetUid: string): Promise<void> {
+  await deleteDoc(doc(db, "rooms", roomId, "members", targetUid));
+  try {
+    await deleteDoc(doc(db, "users", targetUid, "rooms", roomId));
+  } catch {
+    // best-effort cleanup of the removed member's own index entry
+  }
+}
+
+export async function leaveRoom(roomId: string, user: User): Promise<void> {
+  await deleteDoc(doc(db, "rooms", roomId, "members", user.uid));
+  try {
+    await deleteDoc(doc(db, "users", user.uid, "rooms", roomId));
+  } catch {
+    // best-effort
+  }
 }

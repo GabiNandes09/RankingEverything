@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/Button";
 
 export default function LoginPage() {
   const { user, loading, signInWithGoogle } = useAuth();
@@ -29,27 +30,33 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-zinc-50 px-6 dark:bg-black">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-semibold text-black dark:text-zinc-50">
+    <div className="relative flex flex-1 flex-col items-center justify-center gap-8 overflow-hidden px-6">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40">
+        <div className="absolute top-1/4 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-gold/20 blur-3xl" />
+      </div>
+
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="text-5xl" aria-hidden>
+          🏆
+        </span>
+        <h1 className="font-marquee text-5xl leading-none text-gold-gradient sm:text-6xl">
           Ranking Everything
         </h1>
-        <p className="max-w-xs text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="max-w-xs text-sm text-muted">
           Crie salas de ranking colaborativo com seus amigos.
         </p>
       </div>
 
-      <button
-        type="button"
+      <Button
         onClick={handleSignIn}
         disabled={signingIn || loading}
-        className="flex h-12 items-center justify-center gap-3 rounded-full bg-foreground px-6 text-base font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
+        size="lg"
+        icon={<GoogleIcon />}
       >
-        <GoogleIcon />
         {signingIn ? "Entrando..." : "Entrar com Google"}
-      </button>
+      </Button>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }

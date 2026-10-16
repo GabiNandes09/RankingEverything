@@ -16,6 +16,10 @@ import {
   type VoteStatus,
 } from "@/lib/items";
 import { useRoom, useRoomMembership, type RoomMember } from "@/lib/rooms";
+import { Avatar } from "@/components/ui/Avatar";
+import { BackLink } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { StarRating } from "@/components/ui/StarRating";
 
 const STATUS_LABEL: Record<VoteStatus, string> = {
   voted: "Votou",
@@ -23,24 +27,16 @@ const STATUS_LABEL: Record<VoteStatus, string> = {
   abstained_no_vote: "Não quis votar",
 };
 
-function scoreOptions(ratingScale: string): number[] {
-  if (ratingScale === "0-5-stars") {
-    const options: number[] = [];
-    for (let i = 0; i <= 10; i++) options.push(i / 2);
-    return options;
-  }
-  const options: number[] = [];
-  for (let i = 0; i <= 20; i++) options.push(i / 2);
-  return options;
+function toStars(score: number, ratingScale: string): number {
+  return ratingScale === "0-5-stars" ? score : score / 2;
+}
+
+function fromStars(stars: number, ratingScale: string): number {
+  return ratingScale === "0-5-stars" ? stars : stars * 2;
 }
 
 function formatScore(score: number, ratingScale: string): string {
-  if (ratingScale === "0-5-stars") {
-    const full = Math.floor(score);
-    const half = score - full === 0.5;
-    return "★".repeat(full) + (half ? "½" : "") + ` (${score})`;
-  }
-  return score.toString();
+  return ratingScale === "0-5-stars" ? `${score}/5` : `${score}/10`;
 }
 
 export default function ItemPage() {
@@ -56,10 +52,10 @@ export default function ItemPage() {
 
   const item = useMemo(() => items.find((i) => i.id === itemId) ?? null, [items, itemId]);
 
-  const [score, setScore] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
+  const [justVoted, setJustVoted] = useState(false);
+  const [members, setMembers] = useState<Record<string, RoomMember>>({});
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -70,22 +66,15 @@ export default function ItemPage() {
   useEffect(() => {
     if (!roomId) return;
     const unsubscribe = onSnapshot(collection(db, "rooms", roomId, "members"), (snapshot) => {
-      const names: Record<string, string> = {};
+      const map: Record<string, RoomMember> = {};
       snapshot.docs.forEach((d) => {
         const data = d.data() as RoomMember;
-        names[data.uid] = data.displayName;
+        map[data.uid] = data;
       });
-      setMemberNames(names);
+      setMembers(map);
     });
     return unsubscribe;
   }, [roomId]);
-
-  useEffect(() => {
-    if (myVote?.status === "voted" && myVote.score != null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the score picker from the user's existing vote
-      setScore(myVote.score);
-    }
-  }, [myVote]);
 
   const loading = authLoading || roomLoading || memberLoading || itemsLoading || votesLoading;
   const canManage = member?.role === "owner" || member?.role === "admin" || isMaster;
@@ -97,23 +86,24 @@ export default function ItemPage() {
   if (!item) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-zinc-600 dark:text-zinc-400">Item não encontrado.</p>
-        <Link href={`/rooms/${roomId}`} className="text-sm font-medium underline">
+        <p className="text-muted">Item não encontrado.</p>
+        <Link href={`/rooms/${roomId}`} className="text-sm font-medium text-gold hover:underline">
           Voltar pra sala
         </Link>
       </div>
     );
   }
 
-  async function submitVote(status: VoteStatus) {
+  async function submitVote(status: VoteStatus, score: number | null) {
     if (!user) return;
     setSubmitting(true);
     setError(null);
     try {
-      await castVote(roomId, itemId, user, {
-        status,
-        score: status === "voted" ? score : null,
-      });
+      await castVote(roomId, itemId, user, { status, score });
+      if (status === "voted") {
+        setJustVoted(true);
+        setTimeout(() => setJustVoted(false), 1200);
+      }
     } catch {
       setError("Não foi possível registrar seu voto.");
     } finally {
@@ -137,124 +127,125 @@ export default function ItemPage() {
       ? votedVotes.reduce((sum, v) => sum + (v.score ?? 0), 0) / votedVotes.length
       : null;
 
+  const myStars = myVote?.status === "voted" && myVote.score != null
+    ? toStars(myVote.score, room.ratingScale)
+    : 0;
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-6 py-10">
-      <Link href={`/rooms/${roomId}`} className="text-sm text-zinc-500 hover:underline">
-        ← Voltar pra sala
-      </Link>
+      <BackLink href={`/rooms/${roomId}`}>Voltar pra sala</BackLink>
 
       {item.imageUrl && (
-        <div className="relative h-56 w-full overflow-hidden rounded-xl bg-black/[.04] dark:bg-white/[.06]">
-          <Image
-            src={item.imageUrl}
-            alt={item.title}
-            fill
-            className="object-cover"
-            unoptimized
-          />
+        <div className="relative h-64 w-full overflow-hidden rounded-2xl bg-background-elevated-2 shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
+          <Image src={item.imageUrl} alt={item.title} fill unoptimized className="object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
         </div>
       )}
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-black dark:text-zinc-50">{item.title}</h1>
-          {item.eventDate && <p className="text-sm text-zinc-500">{item.eventDate}</p>}
-          <p className="text-sm text-zinc-500">
-            {average != null
-              ? `Média: ${formatScore(average, room.ratingScale)} (${votedVotes.length} voto${votedVotes.length === 1 ? "" : "s"})`
-              : "Sem votos ainda"}
-          </p>
+          <h1 className="font-marquee text-3xl leading-none text-foreground">{item.title}</h1>
+          {item.eventDate && <p className="mt-1 text-sm text-muted">{item.eventDate}</p>}
+          <div className="mt-2 flex items-center gap-2">
+            {average != null ? (
+              <>
+                <StarRating value={toStars(average, room.ratingScale)} readOnly size="sm" />
+                <span className="text-sm text-muted">
+                  {formatScore(Number(average.toFixed(1)), room.ratingScale)} ·{" "}
+                  {votedVotes.length} voto{votedVotes.length === 1 ? "" : "s"}
+                </span>
+              </>
+            ) : (
+              <p className="text-sm text-muted">Sem votos ainda</p>
+            )}
+          </div>
         </div>
 
         {canManage && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="h-9 shrink-0 rounded-full border border-red-200 px-4 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950"
-          >
+          <Button variant="danger" size="sm" onClick={handleDelete} className="shrink-0">
             Excluir
-          </button>
+          </Button>
         )}
       </div>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#111]">
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Seu voto</p>
+      <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-background-elevated p-6">
+        <p className="text-sm font-medium text-muted">
+          {justVoted ? "Voto registrado! 🎉" : "Toque ou arraste pra dar sua nota"}
+        </p>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={score}
-            onChange={(event) => setScore(Number(event.target.value))}
-            className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm dark:border-white/[.145] dark:bg-[#111]"
-          >
-            {scoreOptions(room.ratingScale).map((opt) => (
-              <option key={opt} value={opt}>
-                {formatScore(opt, room.ratingScale)}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => submitVote("voted")}
-            className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background disabled:opacity-60"
-          >
-            Votar
-          </button>
-        </div>
+        <StarRating
+          value={myStars}
+          onChange={(stars) =>
+            submitVote("voted", fromStars(stars, room.ratingScale))
+          }
+          size="xl"
+        />
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => submitVote("abstained_no_participation")}
-            className="h-9 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-          >
-            Não participei
-          </button>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => submitVote("abstained_no_vote")}
-            className="h-9 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-          >
-            Não quero votar
-          </button>
-        </div>
-
-        {myVote && (
-          <p className="text-xs text-zinc-500">
-            Seu status atual: {STATUS_LABEL[myVote.status]}
-            {myVote.status === "voted" && myVote.score != null
-              ? ` — ${formatScore(myVote.score, room.ratingScale)}`
-              : ""}
+        {myVote?.status === "voted" && myVote.score != null && (
+          <p className="font-marquee text-2xl text-gold-gradient">
+            {formatScore(myVote.score, room.ratingScale)}
           </p>
         )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => submitVote("abstained_no_participation", null)}
+            className={`h-9 rounded-full border px-3 text-xs font-medium transition-colors disabled:opacity-60 ${
+              myVote?.status === "abstained_no_participation"
+                ? "border-gold/50 bg-gold/10 text-gold"
+                : "border-border text-muted hover:text-foreground"
+            }`}
+          >
+            🙈 Não participei
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => submitVote("abstained_no_vote", null)}
+            className={`h-9 rounded-full border px-3 text-xs font-medium transition-colors disabled:opacity-60 ${
+              myVote?.status === "abstained_no_vote"
+                ? "border-gold/50 bg-gold/10 text-gold"
+                : "border-border text-muted hover:text-foreground"
+            }`}
+          >
+            🤐 Não quero votar
+          </button>
+        </div>
+
+        {error && <p className="text-sm text-danger">{error}</p>}
       </div>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-          Votos de todos os membros
-        </p>
-        {votes.length === 0 && (
-          <p className="text-sm text-zinc-500">Ninguém votou ainda.</p>
-        )}
-        {votes.map((v) => (
-          <div
-            key={v.uid}
-            className="flex items-center justify-between rounded-lg border border-black/[.08] bg-white px-4 py-2 text-sm dark:border-white/[.145] dark:bg-[#111]"
-          >
-            <span className="text-zinc-500">
-              {v.uid === user.uid ? "Você" : (memberNames[v.uid] ?? v.uid)}
-            </span>
-            <span className="font-medium text-black dark:text-zinc-50">
-              {v.status === "voted" && v.score != null
-                ? formatScore(v.score, room.ratingScale)
-                : STATUS_LABEL[v.status]}
-            </span>
-          </div>
-        ))}
+        <p className="text-sm font-medium text-muted">Votos de todos os membros</p>
+        {votes.length === 0 && <p className="text-sm text-muted">Ninguém votou ainda.</p>}
+        {votes.map((v) => {
+          const voter = members[v.uid];
+          return (
+            <div
+              key={v.uid}
+              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-elevated px-4 py-2.5"
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Avatar
+                  src={voter?.uid === user.uid ? user.photoURL : undefined}
+                  alt={voter?.displayName ?? v.uid}
+                  size={28}
+                  role={voter?.role}
+                />
+                <span className="truncate text-sm text-foreground">
+                  {v.uid === user.uid ? "Você" : (voter?.displayName ?? v.uid)}
+                </span>
+              </div>
+              {v.status === "voted" && v.score != null ? (
+                <StarRating value={toStars(v.score, room.ratingScale)} readOnly size="sm" />
+              ) : (
+                <span className="shrink-0 text-xs text-muted">{STATUS_LABEL[v.status]}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

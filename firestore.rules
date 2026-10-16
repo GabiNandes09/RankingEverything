@@ -45,10 +45,16 @@ service cloud.firestore {
         && request.resource.data.globalRole == resource.data.globalRole;
       allow delete: if false;
 
-      // Denormalized "my rooms" index — fully scoped to the user's own
-      // subtree, so this is always just request.auth.uid == uid.
+      // Denormalized "my rooms" index — normally fully scoped to the
+      // user's own subtree (request.auth.uid == uid). A room's owner (or
+      // master) may also update/delete another user's entry here, so
+      // promoting/removing a member can keep this display-only copy in
+      // sync or clean it up — it's never the source of truth for role or
+      // membership, see rooms/{roomId}/members below.
       match /rooms/{roomId} {
-        allow read, write: if isSignedIn() && request.auth.uid == uid;
+        allow read, create: if isSignedIn() && request.auth.uid == uid;
+        allow update, delete: if isSignedIn()
+          && (request.auth.uid == uid || roleIn(roomId, ["owner"]) || isMaster());
       }
     }
 
@@ -85,7 +91,11 @@ service cloud.firestore {
             || request.resource.data.role == "member"
           );
 
-        allow update: if roleIn(roomId, ["owner"]) || isMaster();
+        // Only "admin"/"member" here — "owner" is set exclusively at
+        // creation (see allow create above) and tied to the room's
+        // ownerId, so it can never be handed out via an update.
+        allow update: if (roleIn(roomId, ["owner"]) || isMaster())
+          && request.resource.data.role in ["admin", "member"];
         allow delete: if (isSignedIn() && request.auth.uid == memberId)
           || roleIn(roomId, ["owner"]) || isMaster();
       }

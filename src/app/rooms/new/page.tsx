@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { createRoom, type RatingScale } from "@/lib/rooms";
+import { BackLink, PageTitle } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Field, Input } from "@/components/ui/Input";
 
 export default function NewRoomPage() {
   const { user, loading } = useAuth();
@@ -45,64 +48,94 @@ export default function NewRoomPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 bg-zinc-50 px-6 py-12 dark:bg-black">
-      <h1 className="text-xl font-semibold text-black dark:text-zinc-50">Criar Sala</h1>
+    <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 py-12">
+      <BackLink href="/rooms">Minhas Salas</BackLink>
+      <PageTitle subtitle="Toda sessão de pipoca merece um ranking.">
+        🎬 Criar Sala
+      </PageTitle>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Nome da sala
-          <input
+        <Field label="Nome da sala">
+          <Input
             required
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Clube do Cinema"
-            className="h-11 rounded-lg border border-black/[.08] bg-white px-3 text-base dark:border-white/[.145] dark:bg-[#111]"
           />
-        </label>
+        </Field>
 
-        <label className="flex flex-col gap-1 text-sm">
-          Categoria
-          <input
+        <Field label="Categoria">
+          <Input
             required
             value={category}
             onChange={(event) => setCategory(event.target.value)}
             placeholder="Filmes"
-            className="h-11 rounded-lg border border-black/[.08] bg-white px-3 text-base dark:border-white/[.145] dark:bg-[#111]"
           />
-        </label>
+        </Field>
 
-        <fieldset className="flex flex-col gap-2 text-sm">
-          <legend className="mb-1">Escala de nota</legend>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="ratingScale"
-              checked={ratingScale === "0-10"}
-              onChange={() => setRatingScale("0-10")}
-            />
-            0 a 10 (com decimais)
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="ratingScale"
-              checked={ratingScale === "0-5-stars"}
-              onChange={() => setRatingScale("0-5-stars")}
-            />
-            0 a 5 estrelas (meio ponto)
-          </label>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm text-muted">Escala de nota</legend>
+          <ScaleOption
+            checked={ratingScale === "0-10"}
+            onSelect={() => setRatingScale("0-10")}
+            icon="🔟"
+            label="0 a 10"
+            description="Com decimais"
+          />
+          <ScaleOption
+            checked={ratingScale === "0-5-stars"}
+            onSelect={() => setRatingScale("0-5-stars")}
+            icon="⭐"
+            label="0 a 5 estrelas"
+            description="Meia estrela"
+          />
         </fieldset>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-2 flex h-11 items-center justify-center rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
-        >
+        <Button type="submit" disabled={submitting} className="mt-2">
           {submitting ? "Criando..." : "Criar sala"}
-        </button>
+        </Button>
       </form>
     </div>
+  );
+}
+
+function ScaleOption({
+  checked,
+  onSelect,
+  icon,
+  label,
+  description,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  icon: string;
+  label: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+        checked
+          ? "border-gold/50 bg-gold/10"
+          : "border-border bg-background-elevated-2 hover:border-foreground/20"
+      }`}
+    >
+      <span className="text-xl" aria-hidden>
+        {icon}
+      </span>
+      <span className="flex-1">
+        <span className="block text-sm font-medium text-foreground">{label}</span>
+        <span className="block text-xs text-muted">{description}</span>
+      </span>
+      <span
+        className={`h-4 w-4 shrink-0 rounded-full border-2 ${
+          checked ? "border-gold bg-gold" : "border-border"
+        }`}
+      />
+    </button>
   );
 }

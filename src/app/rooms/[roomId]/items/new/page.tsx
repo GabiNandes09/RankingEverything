@@ -5,6 +5,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { addItem } from "@/lib/items";
 import { useRoomMembership } from "@/lib/rooms";
+import { BackLink, PageTitle } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Field, Input } from "@/components/ui/Input";
 
 export default function NewItemPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -57,49 +60,40 @@ export default function NewItemPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 py-12">
-      <h1 className="text-xl font-semibold text-black dark:text-zinc-50">Adicionar Item</h1>
+      <BackLink href={`/rooms/${roomId}`}>Voltar pra sala</BackLink>
+      <PageTitle subtitle="O que vamos rankear dessa vez?">🎞️ Adicionar Item</PageTitle>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Título
-          <input
+        <Field label="Título">
+          <Input
             required
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Nome do filme"
-            className="h-11 rounded-lg border border-black/[.08] bg-white px-3 text-base dark:border-white/[.145] dark:bg-[#111]"
           />
-        </label>
+        </Field>
 
-        <label className="flex flex-col gap-1 text-sm">
-          Imagem (URL, opcional)
-          <input
+        <Field label="Imagem (URL, opcional)">
+          <Input
             value={imageUrl}
             onChange={(event) => setImageUrl(event.target.value)}
             placeholder="https://..."
-            className="h-11 rounded-lg border border-black/[.08] bg-white px-3 text-base dark:border-white/[.145] dark:bg-[#111]"
           />
-        </label>
+        </Field>
 
-        <label className="flex flex-col gap-1 text-sm">
-          Data do evento (opcional)
-          <input
+        <Field label="Data do evento (opcional)">
+          <Input
             type="date"
             value={eventDate}
             onChange={(event) => setEventDate(event.target.value)}
-            className="h-11 rounded-lg border border-black/[.08] bg-white px-3 text-base dark:border-white/[.145] dark:bg-[#111]"
           />
-        </label>
+        </Field>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-2 flex h-11 items-center justify-center rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-60 dark:hover:bg-[#ccc]"
-        >
+        <Button type="submit" disabled={submitting} className="mt-2">
           {submitting ? "Adicionando..." : "Adicionar item"}
-        </button>
+        </Button>
       </form>
     </div>
   );
