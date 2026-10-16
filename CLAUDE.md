@@ -40,7 +40,8 @@ Logo após login (ou reload que restaura sessão persistida), existe uma race en
 
 - `isMember`/`isMaster` usam `exists()`, nunca `get(...).data != null` — chamar `.data` num `get()` de documento inexistente lança erro na regra em vez de retornar falso, o que quebra até condições que deveriam ser curto-circuitadas por um `||` anterior.
 - Entrar numa sala sempre cria o próprio doc de membro; só pode se auto-atribuir `role: "owner"` se for de fato o `ownerId` da sala (checado contra o doc da sala já commitado). Promoção a admin/rebaixamento só acontece via `update` feito pelo dono (e só pra `"admin"`/`"member"` — nunca `"owner"`, que fica travado na criação).
-- `users/{uid}/rooms/{roomId}`: além do dono do próprio índice (`request.auth.uid == uid`), o dono da sala (ou master) também pode `update`/`delete` a entrada de OUTRO usuário — é o que permite sincronizar o badge de papel ou limpar o índice de quem foi removido.
+- `users/{uid}/rooms/{roomId}`: além do dono do próprio índice (`request.auth.uid == uid`), dono/admin da sala (ou master) também pode `update`/`delete` a entrada de OUTRO usuário — é o que permite sincronizar nome/badge de papel ou limpar o índice de quem foi removido/saiu/teve a sala excluída.
+- `rooms/{roomId}` update: dono/master podem mudar qualquer campo (incluindo soft-delete via `deletedAt`). Admin só pode renomear — a regra usa `request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name","updatedAt"])` pra bloquear qualquer outro campo.
 - Deploy: `npx firebase-tools deploy --only firestore:rules` (e `firestore:indexes` se mexer em índices). O CLI já está autenticado nesta máquina (`npx firebase-tools login` foi rodado uma vez).
 
 ## Escala de nota e StarRating
@@ -53,9 +54,9 @@ Tema cinema escuro com acento dourado (ouro/prata/bronze pro pódio), definido e
 
 ## Estado atual (V1 do roadmap)
 
-Implementado: login Google, criar/entrar em sala (código ou link), papéis dono/admin/membro com promover/rebaixar/remover (dono) e sair da sala (membro/admin), adicionar/editar/excluir item, votar/abster (estrelas interativas), ranking compartilhado e pessoal, filtro por nome/data, tela de membros com ações, redesign visual completo.
+Implementado: login Google, criar/entrar em sala (código ou link), papéis dono/admin/membro com promover/rebaixar/remover (dono) e sair da sala (membro/admin), editar nome da sala (dono/admin) e excluir sala — soft delete (dono), adicionar/editar/excluir item, votar/abster (estrelas interativas), ranking compartilhado e pessoal, filtro por nome/data, tela de membros com ações, redesign visual completo.
 
-Faltando pro V1: dono excluir a sala (soft delete), editar config da sala (nome/categoria/escala), acesso de moderação do Master pela UI (hoje só via Firestore Console), manifest/service worker do PWA.
+Faltando pro V1: editar categoria/escala da sala (só o nome é editável hoje), acesso de moderação do Master pela UI (hoje só via Firestore Console), manifest/service worker do PWA.
 
 ## Ambiente local
 
