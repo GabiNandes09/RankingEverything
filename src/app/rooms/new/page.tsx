@@ -7,6 +7,7 @@ import { createRoom, type RatingScale } from "@/lib/rooms";
 import { BackLink, PageTitle } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
+import { PageLoading } from "@/components/ui/Spinner";
 
 export default function NewRoomPage() {
   const { user, loading } = useAuth();
@@ -44,7 +45,7 @@ export default function NewRoomPage() {
   }
 
   if (loading || !user) {
-    return null;
+    return <PageLoading />;
   }
 
   return (

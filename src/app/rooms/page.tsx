@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RoleBadge } from "@/components/ui/RoleBadge";
+import { PageLoading } from "@/components/ui/Spinner";
 
 export default function RoomsPage() {
   const { user, loading, signOutUser } = useAuth();
@@ -22,7 +23,7 @@ export default function RoomsPage() {
   }, [loading, user, router]);
 
   if (loading || !user) {
-    return null;
+    return <PageLoading />;
   }
 
   return (

@@ -21,6 +21,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { BackLink } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { StarRating } from "@/components/ui/StarRating";
+import { PageLoading } from "@/components/ui/Spinner";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const STATUS_LABEL: Record<VoteStatus, string> = {
   voted: "Votou",
@@ -44,6 +46,7 @@ export default function ItemPage() {
   const { roomId, itemId } = useParams<{ roomId: string; itemId: string }>();
   const { user, loading: authLoading, isMaster } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
 
   const { room, loading: roomLoading } = useRoom(roomId);
   const { member, loading: memberLoading } = useRoomMembership(roomId, user?.uid);
@@ -81,7 +84,7 @@ export default function ItemPage() {
   const canManage = member?.role === "owner" || member?.role === "admin" || isMaster;
 
   if (loading || !user || !room) {
-    return null;
+    return <PageLoading />;
   }
 
   if (!item) {
@@ -113,7 +116,12 @@ export default function ItemPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("Excluir este item? Essa ação não pode ser desfeita.")) return;
+    const ok = await confirm("Essa ação não pode ser desfeita.", {
+      title: "Excluir item?",
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteItem(roomId, itemId);
       router.push(`/rooms/${roomId}`);

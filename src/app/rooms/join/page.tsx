@@ -7,6 +7,7 @@ import { joinRoomByCode } from "@/lib/rooms";
 import { BackLink, PageTitle } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
+import { PageLoading } from "@/components/ui/Spinner";
 
 export default function JoinRoomPage() {
   const { user, loading } = useAuth();
@@ -38,7 +39,7 @@ export default function JoinRoomPage() {
   }
 
   if (loading || !user) {
-    return null;
+    return <PageLoading />;
   }
 
   return (

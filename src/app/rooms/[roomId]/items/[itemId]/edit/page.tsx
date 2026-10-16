@@ -7,6 +7,7 @@ import { updateItem, useItems } from "@/lib/items";
 import { useRoomMembership } from "@/lib/rooms";
 import { BackLink, PageTitle } from "@/components/ui/PageHeader";
 import { ItemForm, type ItemFormValues } from "@/components/ItemForm";
+import { PageLoading } from "@/components/ui/Spinner";
 
 export default function EditItemPage() {
   const { roomId, itemId } = useParams<{ roomId: string; itemId: string }>();
@@ -33,7 +34,7 @@ export default function EditItemPage() {
   const loading = authLoading || memberLoading || itemsLoading;
 
   if (loading || !user || !canEdit) {
-    return null;
+    return <PageLoading />;
   }
 
   if (!item) {

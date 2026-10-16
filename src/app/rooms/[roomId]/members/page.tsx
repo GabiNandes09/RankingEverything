@@ -17,11 +17,14 @@ import { Avatar } from "@/components/ui/Avatar";
 import { BackLink, PageTitle } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { RoleBadge } from "@/components/ui/RoleBadge";
+import { PageLoading } from "@/components/ui/Spinner";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 export default function RoomMembersPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const { user, loading: authLoading, isMaster } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
   const { member: myMembership } = useRoomMembership(roomId, user?.uid);
 
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -53,7 +56,7 @@ export default function RoomMembersPage() {
   }, [roomId]);
 
   if (authLoading || !user) {
-    return null;
+    return <PageLoading />;
   }
 
   const isOwner = myMembership?.role === "owner" || isMaster;
@@ -71,7 +74,12 @@ export default function RoomMembersPage() {
   }
 
   async function handleRemove(targetUid: string) {
-    if (!confirm("Remover esse membro da sala?")) return;
+    const ok = await confirm("A pessoa precisa entrar de novo com o código ou link.", {
+      title: "Remover membro?",
+      confirmLabel: "Remover",
+      danger: true,
+    });
+    if (!ok) return;
     setBusyUid(targetUid);
     setError(null);
     try {
@@ -85,7 +93,12 @@ export default function RoomMembersPage() {
 
   async function handleLeave() {
     if (!user) return;
-    if (!confirm("Sair dessa sala?")) return;
+    const ok = await confirm("Você vai perder o acesso a essa sala.", {
+      title: "Sair da sala?",
+      confirmLabel: "Sair",
+      danger: true,
+    });
+    if (!ok) return;
     setBusyUid(user.uid);
     setError(null);
     try {

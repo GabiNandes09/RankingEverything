@@ -24,6 +24,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { RankBadge } from "@/components/ui/RankBadge";
 import { StarRating } from "@/components/ui/StarRating";
+import { PageLoading } from "@/components/ui/Spinner";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const SCALE_LABEL: Record<string, string> = {
   "0-10": "0 a 10",
@@ -38,6 +40,7 @@ export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const { user, loading: authLoading, isMaster } = useAuth();
   const router = useRouter();
+  const confirm = useConfirm();
 
   const { member, loading: memberLoading } = useRoomMembership(roomId, user?.uid);
   const canAccess = !!member || isMaster;
@@ -84,7 +87,7 @@ export default function RoomPage() {
   }, [user, memberLoading, member, isMaster, roomId, joining]);
 
   if (authLoading || memberLoading || !user) {
-    return null;
+    return <PageLoading />;
   }
 
   if (!canAccess) {
@@ -98,18 +101,11 @@ export default function RoomPage() {
         </div>
       );
     }
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        <span className="text-4xl animate-pulse" aria-hidden>
-          🎟️
-        </span>
-        <p className="text-muted">Entrando na sala...</p>
-      </div>
-    );
+    return <PageLoading label="Entrando na sala..." />;
   }
 
   if (roomLoading || itemsLoading) {
-    return null;
+    return <PageLoading />;
   }
 
   if (error || !room) {
@@ -178,7 +174,11 @@ export default function RoomPage() {
   }
 
   async function handleDeleteRoom() {
-    if (!confirm(`Excluir a sala "${room?.name}"? Essa ação não pode ser desfeita.`)) return;
+    const ok = await confirm(
+      `"${room?.name}" vai sumir pra todo mundo. Essa ação não pode ser desfeita.`,
+      { title: "Excluir sala?", confirmLabel: "Excluir", danger: true },
+    );
+    if (!ok) return;
     try {
       await deleteRoom(roomId);
       router.push("/rooms");

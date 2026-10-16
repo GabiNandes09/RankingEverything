@@ -7,6 +7,7 @@ import { addItem } from "@/lib/items";
 import { useRoomMembership } from "@/lib/rooms";
 import { BackLink, PageTitle } from "@/components/ui/PageHeader";
 import { ItemForm, type ItemFormValues } from "@/components/ItemForm";
+import { PageLoading } from "@/components/ui/Spinner";
 
 export default function NewItemPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -29,7 +30,7 @@ export default function NewItemPage() {
   }, [authLoading, memberLoading, canAdd, roomId, router]);
 
   if (authLoading || memberLoading || !user || !canAdd) {
-    return null;
+    return <PageLoading />;
   }
 
   async function handleSubmit(values: ItemFormValues) {
