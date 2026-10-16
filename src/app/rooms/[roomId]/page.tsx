@@ -11,7 +11,7 @@ import {
   useAllItemVotes,
   useItems,
 } from "@/lib/items";
-import { useRoom, useRoomMembership } from "@/lib/rooms";
+import { deleteRoom, updateRoomName, useRoom, useRoomMembership } from "@/lib/rooms";
 import { BackLink } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -42,6 +42,10 @@ export default function RoomPage() {
   const [view, setView] = useState<"shared" | "personal">("shared");
   const [nameFilter, setNameFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -66,7 +70,23 @@ export default function RoomPage() {
     );
   }
 
+  if (room.deletedAt) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <span className="text-4xl" aria-hidden>
+          🗑️
+        </span>
+        <p className="text-muted">A sala &quot;{room.name}&quot; foi excluída.</p>
+        <Link href="/rooms" className="text-sm font-medium text-gold hover:underline">
+          Voltar pra Minhas Salas
+        </Link>
+      </div>
+    );
+  }
+
   const canManageItems = member?.role === "owner" || member?.role === "admin" || isMaster;
+  const canRenameRoom = canManageItems;
+  const canDeleteRoom = member?.role === "owner" || isMaster;
   const inviteLink =
     typeof window !== "undefined" ? `${window.location.origin}/rooms/${room.id}` : "";
 
@@ -77,6 +97,40 @@ export default function RoomPage() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
+    }
+  }
+
+  function startEditingName() {
+    setNameDraft(room?.name ?? "");
+    setNameError(null);
+    setEditingName(true);
+  }
+
+  async function saveRoomName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      setNameError("O nome não pode ficar vazio.");
+      return;
+    }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      await updateRoomName(roomId, trimmed);
+      setEditingName(false);
+    } catch {
+      setNameError("Não foi possível salvar o nome.");
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function handleDeleteRoom() {
+    if (!confirm(`Excluir a sala "${room?.name}"? Essa ação não pode ser desfeita.`)) return;
+    try {
+      await deleteRoom(roomId);
+      router.push("/rooms");
+    } catch {
+      setNameError("Não foi possível excluir a sala.");
     }
   }
 
@@ -111,9 +165,57 @@ export default function RoomPage() {
       </div>
 
       <div>
-        <h1 className="font-marquee text-3xl leading-none text-gold-gradient sm:text-4xl">
-          {room.name}
-        </h1>
+        {editingName ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Input
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+                autoFocus
+                maxLength={80}
+                className="font-marquee text-2xl"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") saveRoomName();
+                  if (event.key === "Escape") setEditingName(false);
+                }}
+              />
+              <Button size="sm" disabled={savingName} onClick={saveRoomName}>
+                {savingName ? "..." : "Salvar"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={savingName}
+                onClick={() => setEditingName(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+            {nameError && <p className="text-sm text-danger">{nameError}</p>}
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="font-marquee text-3xl leading-none text-gold-gradient sm:text-4xl">
+              {room.name}
+            </h1>
+
+            {(canRenameRoom || canDeleteRoom) && (
+              <div className="flex shrink-0 gap-2">
+                {canRenameRoom && (
+                  <Button variant="secondary" size="sm" onClick={startEditingName}>
+                    Editar
+                  </Button>
+                )}
+                {canDeleteRoom && (
+                  <Button variant="danger" size="sm" onClick={handleDeleteRoom}>
+                    Excluir
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {nameError && !editingName && <p className="mt-1 text-sm text-danger">{nameError}</p>}
         <p className="text-sm text-muted">
           {room.category} · Escala {SCALE_LABEL[room.ratingScale] ?? room.ratingScale}
         </p>

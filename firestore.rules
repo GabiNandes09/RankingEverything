@@ -46,15 +46,15 @@ service cloud.firestore {
       allow delete: if false;
 
       // Denormalized "my rooms" index — normally fully scoped to the
-      // user's own subtree (request.auth.uid == uid). A room's owner (or
-      // master) may also update/delete another user's entry here, so
-      // promoting/removing a member can keep this display-only copy in
-      // sync or clean it up — it's never the source of truth for role or
-      // membership, see rooms/{roomId}/members below.
+      // user's own subtree (request.auth.uid == uid). A room's owner/admin
+      // (or master) may also update/delete another user's entry here, so
+      // renaming/promoting/removing a member can keep this display-only
+      // copy in sync or clean it up — it's never the source of truth for
+      // role or membership, see rooms/{roomId}/members below.
       match /rooms/{roomId} {
         allow read, create: if isSignedIn() && request.auth.uid == uid;
         allow update, delete: if isSignedIn()
-          && (request.auth.uid == uid || roleIn(roomId, ["owner"]) || isMaster());
+          && (request.auth.uid == uid || roleIn(roomId, ["owner", "admin"]) || isMaster());
       }
     }
 
@@ -72,7 +72,15 @@ service cloud.firestore {
     match /rooms/{roomId} {
       allow read: if isSignedIn() && (isMember(roomId) || isMaster());
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if roleIn(roomId, ["owner"]) || isMaster();
+
+      // Owner/master can change anything (including soft-deleting via
+      // deletedAt). Admin can only rename — any other field change
+      // (deletedAt, category, ratingScale, ownerId, code...) is denied.
+      allow update: if roleIn(roomId, ["owner"]) || isMaster()
+        || (
+          roleIn(roomId, ["admin"])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "updatedAt"])
+        );
       allow delete: if false;
 
       match /members/{memberId} {

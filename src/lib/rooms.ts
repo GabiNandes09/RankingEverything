@@ -4,9 +4,11 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   setDoc,
+  updateDoc,
   type DocumentSnapshot,
   type QuerySnapshot,
   type Timestamp,
@@ -306,5 +308,46 @@ export async function leaveRoom(roomId: string, user: User): Promise<void> {
     await deleteDoc(doc(db, "users", user.uid, "rooms", roomId));
   } catch {
     // best-effort
+  }
+}
+
+export async function updateRoomName(roomId: string, name: string): Promise<void> {
+  await updateDoc(doc(db, "rooms", roomId), { name, updatedAt: serverTimestamp() });
+
+  // Best-effort: every member has their own denormalized copy of the room
+  // name (users/{uid}/rooms/{roomId}) for the "Minhas Salas" list — keep
+  // them in sync. The owner is allowed to write any member's entry (see
+  // firestore.rules), but a stray failure here shouldn't block the rename.
+  try {
+    const membersSnap = await getDocs(collection(db, "rooms", roomId, "members"));
+    await Promise.all(
+      membersSnap.docs.map((memberDoc) =>
+        setDoc(doc(db, "users", memberDoc.id, "rooms", roomId), { name }, { merge: true }).catch(
+          () => {},
+        ),
+      ),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export async function deleteRoom(roomId: string): Promise<void> {
+  await updateDoc(doc(db, "rooms", roomId), {
+    deletedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  // Best-effort: a deleted room should drop out of everyone's "Minhas
+  // Salas" list immediately rather than waiting for them to notice.
+  try {
+    const membersSnap = await getDocs(collection(db, "rooms", roomId, "members"));
+    await Promise.all(
+      membersSnap.docs.map((memberDoc) =>
+        deleteDoc(doc(db, "users", memberDoc.id, "rooms", roomId)).catch(() => {}),
+      ),
+    );
+  } catch {
+    // ignore
   }
 }
