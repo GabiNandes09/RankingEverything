@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMaster() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.globalRole == "master";
+    }
+
+    function memberDoc(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+    }
+
+    function isMember(roomId) {
+      return isSignedIn() && memberDoc(roomId).data != null;
+    }
+
+    function roleIn(roomId, roles) {
+      return isMember(roomId) && memberDoc(roomId).data.role in roles;
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.globalRole == resource.data.globalRole;
+      allow delete: if false;
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isSignedIn() && (isMember(roomId) || isMaster());
+      allow create: if isSignedIn();
+      allow update: if roleIn(roomId, ["owner"]) || isMaster();
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isSignedIn() && (isMember(roomId) || isMaster());
+        allow create: if isSignedIn() && request.auth.uid == memberId;
+        allow update: if roleIn(roomId, ["owner"]) || isMaster();
+        allow delete: if (isSignedIn() && request.auth.uid == memberId)
+          || roleIn(roomId, ["owner"]) || isMaster();
+      }
+
+      match /items/{itemId} {
+        allow read: if isSignedIn() && (isMember(roomId) || isMaster());
+        allow create: if roleIn(roomId, ["owner", "admin"]) || isMaster();
+        allow update, delete: if roleIn(roomId, ["owner", "admin"]) || isMaster();
+
+        match /votes/{voteId} {
+          allow read: if isSignedIn() && (isMember(roomId) || isMaster());
+          allow create, update: if isSignedIn() && request.auth.uid == voteId
+            && (isMember(roomId) || isMaster());
+          allow delete: if false;
+        }
+      }
+    }
+  }
+}
