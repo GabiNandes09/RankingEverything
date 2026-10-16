@@ -6,7 +6,8 @@ Ver [DOCUMENTO_DE_PRODUTO.md](DOCUMENTO_DE_PRODUTO.md) pro escopo/roadmap comple
 
 - Next.js 16 (App Router, TypeScript, Tailwind), tudo client-side (`"use client"` em toda página — não há Server Components com dados, só CSR + Firestore realtime).
 - Firebase: Auth (Google only) + Firestore. Sem Storage, sem Cloud Functions.
-- Deploy: Vercel (ainda não configurado — ver DEPLOY.md).
+- Deploy: Vercel, auto-deploy no push pra `main` (https://ranking-everything.vercel.app).
+- Design system em `src/components/ui/` (tema cinema/ouro-prata-bronze, ver seção abaixo).
 
 ## Estrutura de dados (Firestore)
 
@@ -27,7 +28,7 @@ A primeira implementação de "Minhas Salas" usava `collectionGroup(db, "members
 
 A causa raiz não foi 100% isolada (parece ser uma divergência entre o simulador e a avaliação real de `list` em collection group), mas o fix foi trocar de abordagem: cada sala escreve uma cópia resumida de si mesma em `users/{uid}/rooms/{roomId}` (no `createRoom` e no `joinRoomByCode`). A leitura de "Minhas Salas" vira uma query trivial dentro do próprio documento do usuário, com regra `request.auth.uid == uid` — sem `get()`/`exists()` cruzado, sem collection group, sem índice especial.
 
-**Se for mexer em "Minhas Salas" ou no fluxo de criar/entrar em sala:** lembre de manter `users/{uid}/rooms/{roomId}` sincronizado (hoje só é escrito em `createRoom`/`joinRoomByCode` — não há sync em edição de sala, remoção de membro ou saída da sala, porque essas features ainda não existem).
+**Se for mexer em "Minhas Salas" ou no fluxo de sala/membros:** lembre de manter `users/{uid}/rooms/{roomId}` sincronizado. Hoje é escrito/atualizado em `createRoom`, `joinRoomByCode`, `setMemberRole` (role) e limpo (delete, best-effort) em `removeMember`/`leaveRoom` — todas em `src/lib/rooms.ts`. Não há sync ainda pra edição do nome/categoria/escala da sala (essa feature nem existe).
 
 Pela mesma razão, o ranking (`useAllItemVotes` em `src/lib/items.ts`) também evita `collectionGroup` nos votos: assina uma sub-coleção `votes` por item individualmente (um `onSnapshot` por item), em vez de uma query cruzando todas as sub-coleções `votes`.
 
@@ -38,18 +39,23 @@ Logo após login (ou reload que restaura sessão persistida), existe uma race en
 ## Regras do Firestore (`firestore.rules`)
 
 - `isMember`/`isMaster` usam `exists()`, nunca `get(...).data != null` — chamar `.data` num `get()` de documento inexistente lança erro na regra em vez de retornar falso, o que quebra até condições que deveriam ser curto-circuitadas por um `||` anterior.
-- Entrar numa sala sempre cria o próprio doc de membro; só pode se auto-atribuir `role: "owner"` se for de fato o `ownerId` da sala (checado contra o doc da sala já commitado). Promoção a admin só acontece via `update` feito pelo dono.
+- Entrar numa sala sempre cria o próprio doc de membro; só pode se auto-atribuir `role: "owner"` se for de fato o `ownerId` da sala (checado contra o doc da sala já commitado). Promoção a admin/rebaixamento só acontece via `update` feito pelo dono (e só pra `"admin"`/`"member"` — nunca `"owner"`, que fica travado na criação).
+- `users/{uid}/rooms/{roomId}`: além do dono do próprio índice (`request.auth.uid == uid`), o dono da sala (ou master) também pode `update`/`delete` a entrada de OUTRO usuário — é o que permite sincronizar o badge de papel ou limpar o índice de quem foi removido.
 - Deploy: `npx firebase-tools deploy --only firestore:rules` (e `firestore:indexes` se mexer em índices). O CLI já está autenticado nesta máquina (`npx firebase-tools login` foi rodado uma vez).
 
-## Escala de nota
+## Escala de nota e StarRating
 
-`ratingScale` da sala é `"0-10"` (passo 0.5) ou `"0-5-stars"` (passo 0.5, meia estrela). `scoreOptions()`/`formatScore()` em `src/app/rooms/[roomId]/items/[itemId]/page.tsx` tratam as duas escalas — se adicionar uma nova escala, mexer nessas duas funções e em `formatAverage()` na página da sala.
+`ratingScale` da sala é `"0-10"` (passo 0.5, 2 pontos por estrela) ou `"0-5-stars"` (passo 0.5, 1:1 com a estrela). O componente `StarRating` (`src/components/ui/StarRating.tsx`) é sempre um widget de 5 estrelas (clique ou arraste via Pointer Events, half-star); as páginas convertem entre "estrelas exibidas" (0–5) e "nota real" (`toStars`/`fromStars` em cada página que vota/mostra nota — duplicado em `[roomId]/page.tsx` e `items/[itemId]/page.tsx`, não extraído pra lib ainda). `onChange` do `StarRating` só dispara no release do gesto (drag não grava a cada pixel) — na tela de votação isso já vota automaticamente (`castVote` direto no `onChange`, sem botão "Votar" separado).
+
+## Design system (`src/components/ui/`)
+
+Tema cinema escuro com acento dourado (ouro/prata/bronze pro pódio), definido em `globals.css` (`--gold`, `--silver`, `--bronze`, `--background-elevated`, etc., expostos via `@theme inline` como `bg-gold`, `text-muted`, `border-border`...). Fonte `font-marquee` (Bebas Neue, `layout.tsx`) pra títulos estilo cartaz de cinema. Componentes: `Button` (variants primary/secondary/ghost/danger, aceita `href` pra virar `Link`), `Card`, `Input`/`Field`, `PageHeader` (`BackLink`, `PageTitle`), `EmptyState`, `Avatar` (anel colorido por `MemberRole`), `RoleBadge`, `RankBadge` (medalha 1º/2º/3º), `StarRating`. Reaproveite esses componentes em telas novas em vez de estilizar na mão.
 
 ## Estado atual (V1 do roadmap)
 
-Implementado: login Google, criar/entrar em sala (código ou link), papéis dono/admin/membro (sem UI de promover/remover ainda), adicionar/editar/excluir item, votar/abster, ranking compartilhado e pessoal, filtro por nome/data, tela de membros (somente leitura).
+Implementado: login Google, criar/entrar em sala (código ou link), papéis dono/admin/membro com promover/rebaixar/remover (dono) e sair da sala (membro/admin), adicionar/editar/excluir item, votar/abster (estrelas interativas), ranking compartilhado e pessoal, filtro por nome/data, tela de membros com ações, redesign visual completo.
 
-Faltando pro V1: promover/remover admin, dono remover membro, membro sair da sala, dono excluir sala (soft delete), editar config da sala, acesso de moderação do Master pela UI (hoje só via Firestore Console), manifest/service worker do PWA.
+Faltando pro V1: dono excluir a sala (soft delete), editar config da sala (nome/categoria/escala), acesso de moderação do Master pela UI (hoje só via Firestore Console), manifest/service worker do PWA.
 
 ## Ambiente local
 
