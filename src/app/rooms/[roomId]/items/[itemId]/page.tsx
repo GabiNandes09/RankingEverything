@@ -16,6 +16,7 @@ import {
   type VoteStatus,
 } from "@/lib/items";
 import { useRoom, useRoomMembership, type RoomMember } from "@/lib/rooms";
+import { formatEventDate } from "@/lib/format";
 import { Avatar } from "@/components/ui/Avatar";
 import { BackLink } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -145,7 +146,11 @@ export default function ItemPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="font-marquee text-3xl leading-none text-foreground">{item.title}</h1>
-          {item.eventDate && <p className="mt-1 text-sm text-muted">{item.eventDate}</p>}
+          {item.eventDate && (
+            <p className="mt-1 text-sm text-muted">
+              Assistido em: {formatEventDate(item.eventDate)}
+            </p>
+          )}
           <div className="mt-2 flex items-center gap-2">
             {average != null ? (
               <>

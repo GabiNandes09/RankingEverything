@@ -51,7 +51,7 @@ export default function NewRoomPage() {
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 py-12">
       <BackLink href="/rooms">Minhas Salas</BackLink>
       <PageTitle subtitle="Toda sessão de pipoca merece um ranking.">
-        🎬 Criar Sala
+        🏆 Criar Sala
       </PageTitle>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

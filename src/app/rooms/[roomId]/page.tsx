@@ -11,7 +11,14 @@ import {
   useAllItemVotes,
   useItems,
 } from "@/lib/items";
-import { deleteRoom, updateRoomName, useRoom, useRoomMembership } from "@/lib/rooms";
+import {
+  deleteRoom,
+  joinRoomById,
+  updateRoomName,
+  useRoom,
+  useRoomMembership,
+} from "@/lib/rooms";
+import { formatEventDate } from "@/lib/format";
 import { BackLink } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -32,13 +39,16 @@ export default function RoomPage() {
   const { user, loading: authLoading, isMaster } = useAuth();
   const router = useRouter();
 
-  const { room, loading: roomLoading, error } = useRoom(roomId);
   const { member, loading: memberLoading } = useRoomMembership(roomId, user?.uid);
-  const { items, loading: itemsLoading } = useItems(roomId);
+  const canAccess = !!member || isMaster;
+
+  const { room, loading: roomLoading, error } = useRoom(roomId, canAccess);
+  const { items, loading: itemsLoading } = useItems(canAccess ? roomId : undefined);
   const itemIds = useMemo(() => items.map((i) => i.id), [items]);
-  const votesByItem = useAllItemVotes(roomId, itemIds);
+  const votesByItem = useAllItemVotes(canAccess ? roomId : undefined, itemIds);
 
   const [copied, setCopied] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const [view, setView] = useState<"shared" | "personal">("shared");
   const [nameFilter, setNameFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
@@ -46,6 +56,8 @@ export default function RoomPage() {
   const [nameDraft, setNameDraft] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -53,9 +65,50 @@ export default function RoomPage() {
     }
   }, [authLoading, user, router]);
 
-  const loading = authLoading || roomLoading || memberLoading || itemsLoading;
+  // Opening a room's direct link auto-joins you as a member (PRD: "qualquer
+  // usuário autenticado entra automaticamente ao abrir o link"). Master
+  // views without becoming a member.
+  useEffect(() => {
+    if (!user || memberLoading || member || isMaster || joining) return;
 
-  if (loading || !user) {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicks off the one-time join attempt for this roomId
+    setJoining(true);
+    setJoinError(null);
+    joinRoomById(user, roomId)
+      .catch((err) => {
+        setJoinError(
+          err instanceof Error ? err.message : "Não foi possível entrar nessa sala.",
+        );
+      })
+      .finally(() => setJoining(false));
+  }, [user, memberLoading, member, isMaster, roomId, joining]);
+
+  if (authLoading || memberLoading || !user) {
+    return null;
+  }
+
+  if (!canAccess) {
+    if (joinError) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-muted">{joinError}</p>
+          <Link href="/rooms" className="text-sm font-medium text-gold hover:underline">
+            Voltar pra Minhas Salas
+          </Link>
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <span className="text-4xl animate-pulse" aria-hidden>
+          🎟️
+        </span>
+        <p className="text-muted">Entrando na sala...</p>
+      </div>
+    );
+  }
+
+  if (roomLoading || itemsLoading) {
     return null;
   }
 
@@ -221,18 +274,19 @@ export default function RoomPage() {
         </p>
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl border border-border bg-background-elevated px-3.5 py-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background-elevated px-3.5 py-2.5 text-sm">
         <span className="text-muted">Código:</span>
         <span className="font-mono text-base font-semibold tracking-[0.3em] text-gold">
-          {room.code}
+          {showCode ? room.code : "• • • • • •"}
         </span>
-        <button
-          type="button"
-          onClick={copyInvite}
-          className="ml-auto text-xs font-medium text-muted transition-colors hover:text-gold"
-        >
-          {copied ? "Copiado! ✓" : "Copiar link"}
-        </button>
+        <div className="ml-auto flex gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowCode((v) => !v)}>
+            {showCode ? "Ocultar" : "Mostrar"}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={copyInvite}>
+            {copied ? "Copiado! ✓" : "Copiar link"}
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -313,7 +367,9 @@ export default function RoomPage() {
 
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium text-foreground">{item.title}</p>
-              {item.eventDate && <p className="text-xs text-muted">{item.eventDate}</p>}
+              {item.eventDate && (
+                <p className="text-xs text-muted">Assistido em: {formatEventDate(item.eventDate)}</p>
+              )}
             </div>
 
             <div className="shrink-0 text-right">

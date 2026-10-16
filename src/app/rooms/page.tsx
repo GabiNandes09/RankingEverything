@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useMyRooms } from "@/lib/rooms";
+import { useMyRooms, useRoomCounts, type MemberRole, type MyRoom } from "@/lib/rooms";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -42,7 +42,7 @@ export default function RoomsPage() {
       </div>
 
       <div className="flex gap-3">
-        <Button href="/rooms/new" className="flex-1" icon={<span aria-hidden>🎬</span>}>
+        <Button href="/rooms/new" className="flex-1" icon={<span aria-hidden>🏆</span>}>
           Criar sala
         </Button>
         <Button
@@ -75,19 +75,30 @@ export default function RoomsPage() {
         )}
 
         {rooms.map((room) => (
-          <Link
-            key={room.id}
-            href={`/rooms/${room.id}`}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background-elevated p-4 shadow-[0_2px_12px_rgba(0,0,0,0.25)] transition-all duration-150 hover:-translate-y-0.5 hover:border-gold/30 hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
-          >
-            <div className="min-w-0">
-              <p className="truncate font-medium text-foreground">{room.name}</p>
-              <p className="text-sm text-muted">{room.category}</p>
-            </div>
-            <RoleBadge role={room.role} />
-          </Link>
+          <RoomListItem key={room.id} room={room} />
         ))}
       </div>
     </div>
+  );
+}
+
+function RoomListItem({ room }: { room: MyRoom }) {
+  const { itemCount, memberCount } = useRoomCounts(room.id);
+
+  return (
+    <Link
+      href={`/rooms/${room.id}`}
+      className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background-elevated p-4 shadow-[0_2px_12px_rgba(0,0,0,0.25)] transition-all duration-150 hover:-translate-y-0.5 hover:border-gold/30 hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+    >
+      <div className="min-w-0">
+        <p className="truncate font-medium text-foreground">{room.name}</p>
+        <p className="text-sm text-muted">{room.category}</p>
+        <p className="mt-1 text-xs text-muted">
+          🎞️ {itemCount ?? "…"} {itemCount === 1 ? "item" : "itens"} · 👥{" "}
+          {memberCount ?? "…"} {memberCount === 1 ? "participante" : "participantes"}
+        </p>
+      </div>
+      <RoleBadge role={room.role as MemberRole} />
+    </Link>
   );
 }

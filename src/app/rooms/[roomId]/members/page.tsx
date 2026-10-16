@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, orderBy, query, type QuerySnapshot } from "firebase/firestore";
@@ -175,8 +176,11 @@ export default function RoomMembersPage() {
 
       {myMembership?.role === "owner" && (
         <p className="text-xs text-muted">
-          Como dono, você não pode sair da sala — apenas excluí-la (ainda não disponível nesta
-          tela).
+          Como dono, você não pode sair da sala — apenas excluí-la, na{" "}
+          <Link href={`/rooms/${roomId}`} className="text-gold hover:underline">
+            tela principal da sala
+          </Link>
+          .
         </p>
       )}
     </div>

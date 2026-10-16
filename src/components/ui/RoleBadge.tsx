@@ -19,7 +19,7 @@ const ROLE: Record<MemberRole, { label: string; icon: string; className: string 
 };
 
 export function RoleBadge({ role }: { role: MemberRole }) {
-  const { label, icon, className } = ROLE[role];
+  const { label, icon, className } = ROLE[role] ?? ROLE.member;
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${className}`}

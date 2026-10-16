@@ -104,14 +104,7 @@ export async function createRoom(
   return roomRef.id;
 }
 
-export async function joinRoomByCode(user: User, rawCode: string): Promise<string> {
-  const code = rawCode.trim().toUpperCase();
-  const codeSnap = await getDoc(doc(db, "roomCodes", code));
-  if (!codeSnap.exists()) {
-    throw new Error("Código não encontrado.");
-  }
-
-  const roomId = codeSnap.data().roomId as string;
+async function joinRoomCore(user: User, roomId: string): Promise<void> {
   const memberRef = doc(db, "rooms", roomId, "members", user.uid);
   const existingMember = await getDoc(memberRef);
   let role: MemberRole = "member";
@@ -143,8 +136,23 @@ export async function joinRoomByCode(user: User, rawCode: string): Promise<strin
       role,
     });
   }
+}
 
+export async function joinRoomByCode(user: User, rawCode: string): Promise<string> {
+  const code = rawCode.trim().toUpperCase();
+  const codeSnap = await getDoc(doc(db, "roomCodes", code));
+  if (!codeSnap.exists()) {
+    throw new Error("Código não encontrado.");
+  }
+
+  const roomId = codeSnap.data().roomId as string;
+  await joinRoomCore(user, roomId);
   return roomId;
+}
+
+/** Auto-join flow for someone who opened a direct room link (not a code). */
+export async function joinRoomById(user: User, roomId: string): Promise<void> {
+  await joinRoomCore(user, roomId);
 }
 
 // Denormalized copy of each room the user belongs to, kept at
@@ -201,13 +209,13 @@ export function useMyRooms(uid: string | undefined) {
   };
 }
 
-export function useRoom(roomId: string | undefined) {
+export function useRoom(roomId: string | undefined, enabled = true) {
   const [room, setRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !enabled) return;
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets loading/error when roomId changes
     setLoading(true);
@@ -233,12 +241,12 @@ export function useRoom(roomId: string | undefined) {
     );
 
     return unsubscribe;
-  }, [roomId]);
+  }, [roomId, enabled]);
 
   return {
-    room: roomId ? room : null,
-    loading: roomId ? loading : false,
-    error: roomId ? error : null,
+    room: roomId && enabled ? room : null,
+    loading: roomId && enabled ? loading : false,
+    error: roomId && enabled ? error : null,
   };
 }
 
@@ -350,4 +358,32 @@ export async function deleteRoom(roomId: string): Promise<void> {
   } catch {
     // ignore
   }
+}
+
+// Live item/member counts for a room card in "Minhas Salas". Each visible
+// room gets its own two small listeners (same reasoning as elsewhere in
+// this file: direct subcollection reads instead of a collectionGroup
+// query), which is fine for the handful of rooms a friend group has.
+export function useRoomCounts(roomId: string) {
+  const [itemCount, setItemCount] = useState<number | null>(null);
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const unsubItems = onSnapshot(
+      collection(db, "rooms", roomId, "items"),
+      (snapshot) => setItemCount(snapshot.size),
+      () => setItemCount(null),
+    );
+    const unsubMembers = onSnapshot(
+      collection(db, "rooms", roomId, "members"),
+      (snapshot) => setMemberCount(snapshot.size),
+      () => setMemberCount(null),
+    );
+    return () => {
+      unsubItems();
+      unsubMembers();
+    };
+  }, [roomId]);
+
+  return { itemCount, memberCount };
 }
